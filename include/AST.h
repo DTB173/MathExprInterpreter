@@ -3,85 +3,47 @@
 #include <variant>
 #include <string>
 #include <string_view>
-#include <iostream>
+#include <ostream>
+#include <utility>
+#include <vector>
 #include "Token.h"
 
-enum class NodeType {
-    Number,
-    Variable,
-    Function,
-    Operator
-};
+namespace ast {
+    struct ASTNode;
+    using NodePtr = std::unique_ptr<ASTNode>;
 
-struct ASTNode {
-    std::vector<std::unique_ptr<ASTNode>> m_children;
-    std::variant<std::string, OperatorType, double> m_value;
-    NodeType m_type;
+    struct Unary  { OperatorType op; NodePtr operand; };
+    struct Binary { OperatorType op; NodePtr lhs, rhs; };
+    struct Assign { tok::Variable target; NodePtr value; };
+    struct Call   { tok::Function callee; std::vector<NodePtr> args; };
+    struct FuncDef { tok::Function callee; std::vector<tok::Variable> params; std::shared_ptr<const ASTNode> body; };
 
-    static constexpr std::array<std::string_view, 4> sm_nodeTypeNames = { "Number", "Variable", "Function", "Operator" };
+    struct ASTNode {
+        using Value    = std::variant<tok::Number, tok::Variable, Unary, Binary, Assign, Call, FuncDef>;
+        using Children = std::vector<NodePtr>;
 
-    explicit ASTNode(double value)
-        : m_type{ NodeType::Number }
-        , m_value{ value } {
-    }
-    ASTNode(std::string_view name, NodeType type)
-        : m_type{ type }
-        , m_value{ static_cast<std::string>(name) } {
-        if (type != NodeType::Variable && type != NodeType::Function) {
-            throw std::invalid_argument("Name only valid for Variable/Function");
-        }
-    }
-    explicit ASTNode(OperatorType op)
-        : m_type{ NodeType::Operator }
-        , m_value{ op } {
+        Value    m_value;
+
+        explicit ASTNode(Value v) : m_value{ std::move(v) } {}
+
+        template<typename T> const T* get_if() const { return std::get_if<T>(&m_value); }
+        template<typename T> bool     is()     const { return std::holds_alternative<T>(m_value); }
+    };
+
+    inline NodePtr makeNode(ASTNode::Value v) {
+        return std::make_unique<ASTNode>(ASTNode{ std::move(v) });
     }
 
-    void appendChild(std::unique_ptr<ASTNode> child) {
-        m_children.push_back(std::move(child));
+    inline void print(std::ostream& out, const ASTNode& n, int indent = 0) {
+        const std::string pad(indent, ' ');
+        std::visit(tok::overloaded{
+            [&](const tok::Number& x)   { out << pad << "Number "   << x.value << '\n'; },
+            [&](const tok::Variable& x) { out << pad << "Variable " << x.name  << '\n'; },
+            [&](const Unary& u)  { out << pad << "Unary "  << u.op          << '\n'; print(out, *u.operand, indent + 2); },
+            [&](const Binary& b) { out << pad << "Binary " << b.op          << '\n'; print(out, *b.lhs,     indent + 2); print(out, *b.rhs, indent + 2); },
+            [&](const Assign& a) { out << pad << "Assign " << a.target.name << '\n'; print(out, *a.value,   indent + 2); },
+            [&](const Call& c)   { out << pad << "Call "   << c.callee.name << '\n';  for (const auto& arg : c.args)     print(out, *arg, indent + 2); },
+            [&](const FuncDef& f){ out << pad << "FuncDef " << f.callee.name << '\n'; for (const auto& param : f.params) out << "  " << "Param " << param.name << '\n'; print(out, *f.body, indent + 4); }
+        }, n.m_value);
     }
-
-    template<typename T>
-    T& getValue() {
-        return std::get<T>(m_value);
-    }
-    template<typename T>
-    const T& getValue() const {
-        return std::get<T>(m_value);
-    }
-
-    // Deep copy method for ASTNode
-    std::unique_ptr<ASTNode> clone() const {
-        std::unique_ptr<ASTNode> node;
-        if (m_type == NodeType::Number) {
-            node = std::make_unique<ASTNode>(getValue<double>());
-        }
-        else if (m_type == NodeType::Variable || m_type == NodeType::Function) {
-            node = std::make_unique<ASTNode>(getValue<std::string>(), m_type);
-        }
-        else if (m_type == NodeType::Operator) {
-            node = std::make_unique<ASTNode>(getValue<OperatorType>());
-        }
-        for (const auto& child : m_children) {
-            node->appendChild(child->clone());
-        }
-        return node;
-    }
-
-    static void print(const ASTNode& node, int indent = 0) {
-        using std::cout;
-        auto leftPad = std::string(indent, ' ');
-        size_t typeIdx = static_cast<size_t>(node.m_type);
-        cout << leftPad << node.sm_nodeTypeNames[typeIdx] << ": ";
-        switch (node.m_type) {
-        case NodeType::Number: cout << node.getValue<double>(); break;
-        case NodeType::Variable:
-        case NodeType::Function: cout << node.getValue<std::string>(); break;
-        case NodeType::Operator: cout << node.getValue<OperatorType>(); break;
-        }
-        cout << '\n';
-
-        for (const auto& child : node.m_children) {
-            print(*child, indent + 2);
-        }
-    }
-};
+}

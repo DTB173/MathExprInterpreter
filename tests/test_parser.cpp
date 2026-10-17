@@ -1,3 +1,4 @@
+#define CATCH_CONFIG_MAIN
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 #include "Parser.h"
@@ -5,319 +6,311 @@
 #include "AST.h"
 
 TEST_CASE("Parser: Unary minus and addition (-3+2)") {
-    std::vector<Token> tokens = {
-        Token(OperatorType::UnaryMinus),
-        Token(3.0),
-        Token(OperatorType::Add),
-        Token(2.0)
+    std::vector<tok::Token> tokens = {
+        tok::Token(tok::Operator{ OperatorType::Subtract }),
+        tok::Token(tok::Number{ 3.0 }),
+        tok::Token(tok::Operator{ OperatorType::Add }),
+        tok::Token(tok::Number{ 2.0 })
     };
 
     Parser parser(tokens);
-    auto ast = parser.parseExpression();
+    auto ast = parser.parse();
 
     REQUIRE(ast != nullptr);
-    REQUIRE(ast->m_type == NodeType::Operator);
-    REQUIRE(ast->getValue<OperatorType>() == OperatorType::Add);
-    REQUIRE(ast->m_children.size() == 2);
+    REQUIRE(ast->is<ast::Binary>());
+    auto* bin = ast->get_if<ast::Binary>();
+    REQUIRE(bin->op == OperatorType::Add);
 
     // Left child: Unary minus
-    auto& left = *ast->m_children[0];
-    REQUIRE(left.m_type == NodeType::Operator);
-    REQUIRE(left.getValue<OperatorType>() == OperatorType::UnaryMinus);
-    REQUIRE(left.m_children.size() == 1);
-    REQUIRE(left.m_children[0]->m_type == NodeType::Number);
-    REQUIRE(left.m_children[0]->getValue<double>() == Catch::Approx(3.0));
+    REQUIRE(bin->lhs->is<ast::Unary>());
+    auto* unary = bin->lhs->get_if<ast::Unary>();
+    REQUIRE(unary->op == OperatorType::UnaryMinus);
+    REQUIRE(unary->operand->is<tok::Number>());
+    // Let's check how Number is stored in ASTNode: ASTNode::Value variant contains tok::Number directly!
+    REQUIRE(unary->operand->is<tok::Number>());
+    REQUIRE(unary->operand->get_if<tok::Number>()->value == Catch::Approx(3.0));
 
     // Right child: Number 2
-    auto& right = *ast->m_children[1];
-    REQUIRE(right.m_type == NodeType::Number);
-    REQUIRE(right.getValue<double>() == Catch::Approx(2.0));
+    REQUIRE(bin->rhs->is<tok::Number>());
+    REQUIRE(bin->rhs->get_if<tok::Number>()->value == Catch::Approx(2.0));
 }
 
 TEST_CASE("Parser: Unary plus and multiplication (+5*2)") {
-    std::vector<Token> tokens = {
-        Token(OperatorType::UnaryPlus),
-        Token(5.0),
-        Token(OperatorType::Multiply),
-        Token(2.0)
+    std::vector<tok::Token> tokens = {
+        tok::Token(tok::Operator{ OperatorType::Add }),
+        tok::Token(tok::Number{ 5.0 }),
+        tok::Token(tok::Operator{ OperatorType::Multiply }),
+        tok::Token(tok::Number{ 2.0 })
     };
 
     Parser parser(tokens);
-    auto ast = parser.parseExpression();
+    auto ast = parser.parse();
 
     REQUIRE(ast != nullptr);
-    REQUIRE(ast->m_type == NodeType::Operator);
-    REQUIRE(ast->getValue<OperatorType>() == OperatorType::Multiply);
-    REQUIRE(ast->m_children.size() == 2);
+    REQUIRE(ast->is<ast::Binary>());
+    auto* bin = ast->get_if<ast::Binary>();
+    REQUIRE(bin->op == OperatorType::Multiply);
 
     // Left child: Unary plus
-    auto& left = *ast->m_children[0];
-    REQUIRE(left.m_type == NodeType::Operator);
-    REQUIRE(left.getValue<OperatorType>() == OperatorType::UnaryPlus);
-    REQUIRE(left.m_children.size() == 1);
-    REQUIRE(left.m_children[0]->m_type == NodeType::Number);
-    REQUIRE(left.m_children[0]->getValue<double>() == Catch::Approx(5.0));
+    REQUIRE(bin->lhs->is<ast::Unary>());
+    auto* unary = bin->lhs->get_if<ast::Unary>();
+    REQUIRE(unary->op == OperatorType::UnaryPlus);
+    REQUIRE(unary->operand->is<tok::Number>());
+    REQUIRE(unary->operand->get_if<tok::Number>()->value == Catch::Approx(5.0));
 
     // Right child: Number 2
-    auto& right = *ast->m_children[1];
-    REQUIRE(right.m_type == NodeType::Number);
-    REQUIRE(right.getValue<double>() == Catch::Approx(2.0));
+    REQUIRE(bin->rhs->is<tok::Number>());
+    REQUIRE(bin->rhs->get_if<tok::Number>()->value == Catch::Approx(2.0));
 }
 
 TEST_CASE("Parser: Parenthesized expression (-(4+5))") {
-    std::vector<Token> tokens = {
-        Token(OperatorType::UnaryMinus),
-        Token(TokenType::Parenthesis, '('),
-        Token(4.0),
-        Token(OperatorType::Add),
-        Token(5.0),
-        Token(TokenType::Parenthesis, ')')
+    std::vector<tok::Token> tokens = {
+        tok::Token(tok::Operator{ OperatorType::Subtract }),
+        tok::Token(tok::Parenthesis{ '(' }),
+        tok::Token(tok::Number{ 4.0 }),
+        tok::Token(tok::Operator{ OperatorType::Add }),
+        tok::Token(tok::Number{ 5.0 }),
+        tok::Token(tok::Parenthesis{ ')' })
     };
 
     Parser parser(tokens);
-    auto ast = parser.parseExpression();
+    auto ast = parser.parse();
 
     REQUIRE(ast != nullptr);
-    REQUIRE(ast->m_type == NodeType::Operator);
-    REQUIRE(ast->getValue<OperatorType>() == OperatorType::UnaryMinus);
-    REQUIRE(ast->m_children.size() == 1);
+    REQUIRE(ast->is<ast::Unary>());
+    auto* unary = ast->get_if<ast::Unary>();
+    REQUIRE(unary->op == OperatorType::UnaryMinus);
 
     // Child: Addition
-    auto& child = *ast->m_children[0];
-    REQUIRE(child.m_type == NodeType::Operator);
-    REQUIRE(child.getValue<OperatorType>() == OperatorType::Add);
-    REQUIRE(child.m_children.size() == 2);
-    REQUIRE(child.m_children[0]->m_type == NodeType::Number);
-    REQUIRE(child.m_children[0]->getValue<double>() == Catch::Approx(4.0));
-    REQUIRE(child.m_children[1]->m_type == NodeType::Number);
-    REQUIRE(child.m_children[1]->getValue<double>() == Catch::Approx(5.0));
+    REQUIRE(unary->operand->is<ast::Binary>());
+    auto* bin = unary->operand->get_if<ast::Binary>();
+    REQUIRE(bin->op == OperatorType::Add);
+    REQUIRE(bin->lhs->is<tok::Number>());
+    REQUIRE(bin->lhs->get_if<tok::Number>()->value == Catch::Approx(4.0));
+    REQUIRE(bin->rhs->is<tok::Number>());
+    REQUIRE(bin->rhs->get_if<tok::Number>()->value == Catch::Approx(5.0));
 }
 
 TEST_CASE("Parser: Function call (-sin(x))") {
-    std::vector<Token> tokens = {
-        Token(OperatorType::UnaryMinus),
-        Token(TokenType::Function, "sin"),
-        Token(TokenType::Parenthesis, '('),
-        Token(TokenType::Variable, "x"),
-        Token(TokenType::Parenthesis, ')')
+    std::vector<tok::Token> tokens = {
+        tok::Token(tok::Operator{ OperatorType::Subtract }),
+        tok::Token(tok::Function{ "sin" }),
+        tok::Token(tok::Parenthesis{ '(' }),
+        tok::Token(tok::Variable{ "x" }),
+        tok::Token(tok::Parenthesis{ ')' })
     };
 
     Parser parser(tokens);
-    auto ast = parser.parseExpression();
+    auto ast = parser.parse();
 
     REQUIRE(ast != nullptr);
-    REQUIRE(ast->m_type == NodeType::Operator);
-    REQUIRE(ast->getValue<OperatorType>() == OperatorType::UnaryMinus);
-    REQUIRE(ast->m_children.size() == 1);
+    REQUIRE(ast->is<ast::Unary>());
+    auto* unary = ast->get_if<ast::Unary>();
+    REQUIRE(unary->op == OperatorType::UnaryMinus);
 
     // Child: Function sin
-    auto& child = *ast->m_children[0];
-    REQUIRE(child.m_type == NodeType::Function);
-    REQUIRE(child.getValue<std::string>() == "sin");
-    REQUIRE(child.m_children.size() == 1);
-    REQUIRE(child.m_children[0]->m_type == NodeType::Variable);
-    REQUIRE(child.m_children[0]->getValue<std::string>() == "x");
+    REQUIRE(unary->operand->is<ast::Call>());
+    auto* call = unary->operand->get_if<ast::Call>();
+    REQUIRE(call->callee.name == "sin");
+    REQUIRE(call->args.size() == 1);
+    REQUIRE(call->args[0]->is<tok::Variable>());
+    REQUIRE(call->args[0]->get_if<tok::Variable>()->name == "x");
 }
 
 TEST_CASE("Parser: Complex expression (-3*-2+4)") {
-    std::vector<Token> tokens = {
-        Token(OperatorType::UnaryMinus),
-        Token(3.0),
-        Token(OperatorType::Multiply),
-        Token(OperatorType::UnaryMinus),
-        Token(2.0),
-        Token(OperatorType::Add),
-        Token(4.0)
+    std::vector<tok::Token> tokens = {
+        tok::Token(tok::Operator{ OperatorType::Subtract }),
+        tok::Token(tok::Number{ 3.0 }),
+        tok::Token(tok::Operator{ OperatorType::Multiply }),
+        tok::Token(tok::Operator{ OperatorType::Subtract }),
+        tok::Token(tok::Number{ 2.0 }),
+        tok::Token(tok::Operator{ OperatorType::Add }),
+        tok::Token(tok::Number{ 4.0 })
     };
 
     Parser parser(tokens);
-    auto ast = parser.parseExpression();
+    auto ast = parser.parse();
 
     REQUIRE(ast != nullptr);
-    REQUIRE(ast->m_type == NodeType::Operator);
-    REQUIRE(ast->getValue<OperatorType>() == OperatorType::Add);
-    REQUIRE(ast->m_children.size() == 2);
+    REQUIRE(ast->is<ast::Binary>());
+    auto* rootBin = ast->get_if<ast::Binary>();
+    REQUIRE(rootBin->op == OperatorType::Add);
 
     // Left child: Multiplication
-    auto& left = *ast->m_children[0];
-    REQUIRE(left.m_type == NodeType::Operator);
-    REQUIRE(left.getValue<OperatorType>() == OperatorType::Multiply);
-    REQUIRE(left.m_children.size() == 2);
+    REQUIRE(rootBin->lhs->is<ast::Binary>());
+    auto* multBin = rootBin->lhs->get_if<ast::Binary>();
+    REQUIRE(multBin->op == OperatorType::Multiply);
 
     // Left child's left: Unary minus
-    REQUIRE(left.m_children[0]->m_type == NodeType::Operator);
-    REQUIRE(left.m_children[0]->getValue<OperatorType>() == OperatorType::UnaryMinus);
-    REQUIRE(left.m_children[0]->m_children.size() == 1);
-    REQUIRE(left.m_children[0]->m_children[0]->m_type == NodeType::Number);
-    REQUIRE(left.m_children[0]->m_children[0]->getValue<double>() == Catch::Approx(3.0));
+    REQUIRE(multBin->lhs->is<ast::Unary>());
+    auto* leftUnary = multBin->lhs->get_if<ast::Unary>();
+    REQUIRE(leftUnary->op == OperatorType::UnaryMinus);
+    REQUIRE(leftUnary->operand->is<tok::Number>());
+    REQUIRE(leftUnary->operand->get_if<tok::Number>()->value == Catch::Approx(3.0));
 
     // Left child's right: Unary minus
-    REQUIRE(left.m_children[1]->m_type == NodeType::Operator);
-    REQUIRE(left.m_children[1]->getValue<OperatorType>() == OperatorType::UnaryMinus);
-    REQUIRE(left.m_children[1]->m_children.size() == 1);
-    REQUIRE(left.m_children[1]->m_children[0]->m_type == NodeType::Number);
-    REQUIRE(left.m_children[1]->m_children[0]->getValue<double>() == Catch::Approx(2.0));
+    REQUIRE(multBin->rhs->is<ast::Unary>());
+    auto* rightUnary = multBin->rhs->get_if<ast::Unary>();
+    REQUIRE(rightUnary->op == OperatorType::UnaryMinus);
+    REQUIRE(rightUnary->operand->is<tok::Number>());
+    REQUIRE(rightUnary->operand->get_if<tok::Number>()->value == Catch::Approx(2.0));
 
     // Right child: Number 4
-    auto& right = *ast->m_children[1];
-    REQUIRE(right.m_type == NodeType::Number);
-    REQUIRE(right.getValue<double>() == Catch::Approx(4.0));
+    REQUIRE(rootBin->rhs->is<tok::Number>());
+    REQUIRE(rootBin->rhs->get_if<tok::Number>()->value == Catch::Approx(4.0));
 }
 
 TEST_CASE("Parser: Double unary minus (--5)") {
-    std::vector<Token> tokens = {
-        Token(OperatorType::UnaryMinus),
-        Token(OperatorType::UnaryMinus),
-        Token(5.0)
+    std::vector<tok::Token> tokens = {
+        tok::Token(tok::Operator{ OperatorType::Subtract }),
+        tok::Token(tok::Operator{ OperatorType::Subtract }),
+        tok::Token(tok::Number{ 5.0 })
     };
 
     Parser parser(tokens);
-    auto ast = parser.parseExpression();
+    auto ast = parser.parse();
 
     REQUIRE(ast != nullptr);
-    REQUIRE(ast->m_type == NodeType::Operator);
-    REQUIRE(ast->getValue<OperatorType>() == OperatorType::UnaryMinus);
-    REQUIRE(ast->m_children.size() == 1);
+    REQUIRE(ast->is<ast::Unary>());
+    auto* outerUnary = ast->get_if<ast::Unary>();
+    REQUIRE(outerUnary->op == OperatorType::UnaryMinus);
 
     // Child: Unary minus
-    auto& child = *ast->m_children[0];
-    REQUIRE(child.m_type == NodeType::Operator);
-    REQUIRE(child.getValue<OperatorType>() == OperatorType::UnaryMinus);
-    REQUIRE(child.m_children.size() == 1);
-    REQUIRE(child.m_children[0]->m_type == NodeType::Number);
-    REQUIRE(child.m_children[0]->getValue<double>() == Catch::Approx(5.0));
+    REQUIRE(outerUnary->operand->is<ast::Unary>());
+    auto* innerUnary = outerUnary->operand->get_if<ast::Unary>();
+    REQUIRE(innerUnary->op == OperatorType::UnaryMinus);
+    REQUIRE(innerUnary->operand->is<tok::Number>());
+    REQUIRE(innerUnary->operand->get_if<tok::Number>()->value == Catch::Approx(5.0));
 }
 
 TEST_CASE("Parser: Complex function expression (-3*min(1,2,3)+(-4)/x)") {
-    std::vector<Token> tokens = {
-        Token(OperatorType::UnaryMinus),
-        Token(3.0),
-        Token(OperatorType::Multiply),
-        Token(TokenType::Function, "min"),
-        Token(TokenType::Parenthesis, '('),
-        Token(1.0),
-        Token(TokenType::Comma, ','),
-        Token(2.0),
-        Token(TokenType::Comma, ','),
-        Token(3.0),
-        Token(TokenType::Parenthesis, ')'),
-        Token(OperatorType::Add),
-        Token(TokenType::Parenthesis, '('),
-        Token(OperatorType::UnaryMinus),
-        Token(4.0),
-        Token(TokenType::Parenthesis, ')'),
-        Token(OperatorType::Divide),
-        Token(TokenType::Variable, "x")
+    std::vector<tok::Token> tokens = {
+        tok::Token(tok::Operator{ OperatorType::Subtract }),
+        tok::Token(tok::Number{ 3.0 }),
+        tok::Token(tok::Operator{ OperatorType::Multiply }),
+        tok::Token(tok::Function{ "min" }),
+        tok::Token(tok::Parenthesis{ '(' }),
+        tok::Token(tok::Number{ 1.0 }),
+        tok::Token(tok::Comma{}),
+        tok::Token(tok::Number{ 2.0 }),
+        tok::Token(tok::Comma{}),
+        tok::Token(tok::Number{ 3.0 }),
+        tok::Token(tok::Parenthesis{ ')' }),
+        tok::Token(tok::Operator{ OperatorType::Add }),
+        tok::Token(tok::Parenthesis{ '(' }),
+        tok::Token(tok::Operator{ OperatorType::Subtract }),
+        tok::Token(tok::Number{ 4.0 }),
+        tok::Token(tok::Parenthesis{ ')' }),
+        tok::Token(tok::Operator{ OperatorType::Divide }),
+        tok::Token(tok::Variable{ "x" })
     };
 
     Parser parser(tokens);
-    auto ast = parser.parseExpression();
+    auto ast = parser.parse();
 
     REQUIRE(ast != nullptr);
-    REQUIRE(ast->m_type == NodeType::Operator);
-    REQUIRE(ast->getValue<OperatorType>() == OperatorType::Add);
-    REQUIRE(ast->m_children.size() == 2);
+    REQUIRE(ast->is<ast::Binary>());
+    auto* rootBin = ast->get_if<ast::Binary>();
+    REQUIRE(rootBin->op == OperatorType::Add);
 
     // Left child: Multiplication
-    auto& left = *ast->m_children[0];
-    REQUIRE(left.m_type == NodeType::Operator);
-    REQUIRE(left.getValue<OperatorType>() == OperatorType::Multiply);
-    REQUIRE(left.m_children.size() == 2);
+    REQUIRE(rootBin->lhs->is<ast::Binary>());
+    auto* multBin = rootBin->lhs->get_if<ast::Binary>();
+    REQUIRE(multBin->op == OperatorType::Multiply);
 
     // Left child's left: Unary minus
-    REQUIRE(left.m_children[0]->m_type == NodeType::Operator);
-    REQUIRE(left.m_children[0]->getValue<OperatorType>() == OperatorType::UnaryMinus);
-    REQUIRE(left.m_children[0]->m_children.size() == 1);
-    REQUIRE(left.m_children[0]->m_children[0]->m_type == NodeType::Number);
-    REQUIRE(left.m_children[0]->m_children[0]->getValue<double>() == Catch::Approx(3.0));
+    REQUIRE(multBin->lhs->is<ast::Unary>());
+    auto* leftUnary = multBin->lhs->get_if<ast::Unary>();
+    REQUIRE(leftUnary->op == OperatorType::UnaryMinus);
+    REQUIRE(leftUnary->operand->is<tok::Number>());
+    REQUIRE(leftUnary->operand->get_if<tok::Number>()->value == Catch::Approx(3.0));
 
     // Left child's right: Function min
-    auto& minNode = *left.m_children[1];
-    REQUIRE(minNode.m_type == NodeType::Function);
-    REQUIRE(minNode.getValue<std::string>() == "min");
-    REQUIRE(minNode.m_children.size() == 3);
-    REQUIRE(minNode.m_children[0]->m_type == NodeType::Number);
-    REQUIRE(minNode.m_children[0]->getValue<double>() == Catch::Approx(1.0));
-    REQUIRE(minNode.m_children[1]->m_type == NodeType::Number);
-    REQUIRE(minNode.m_children[1]->getValue<double>() == Catch::Approx(2.0));
-    REQUIRE(minNode.m_children[2]->m_type == NodeType::Number);
-    REQUIRE(minNode.m_children[2]->getValue<double>() == Catch::Approx(3.0));
+    REQUIRE(multBin->rhs->is<ast::Call>());
+    auto* callNode = multBin->rhs->get_if<ast::Call>();
+    REQUIRE(callNode->callee.name == "min");
+    REQUIRE(callNode->args.size() == 3);
+    REQUIRE(callNode->args[0]->is<tok::Number>());
+    REQUIRE(callNode->args[0]->get_if<tok::Number>()->value == Catch::Approx(1.0));
+    REQUIRE(callNode->args[1]->is<tok::Number>());
+    REQUIRE(callNode->args[1]->get_if<tok::Number>()->value == Catch::Approx(2.0));
+    REQUIRE(callNode->args[2]->is<tok::Number>());
+    REQUIRE(callNode->args[2]->get_if<tok::Number>()->value == Catch::Approx(3.0));
 
     // Right child: Division
-    auto& right = *ast->m_children[1];
-    REQUIRE(right.m_type == NodeType::Operator);
-    REQUIRE(right.getValue<OperatorType>() == OperatorType::Divide);
-    REQUIRE(right.m_children.size() == 2);
+    REQUIRE(rootBin->rhs->is<ast::Binary>());
+    auto* divBin = rootBin->rhs->get_if<ast::Binary>();
+    REQUIRE(divBin->op == OperatorType::Divide);
 
     // Right child's left: Unary minus
-    REQUIRE(right.m_children[0]->m_type == NodeType::Operator);
-    REQUIRE(right.m_children[0]->getValue<OperatorType>() == OperatorType::UnaryMinus);
-    REQUIRE(right.m_children[0]->m_children.size() == 1);
-    REQUIRE(right.m_children[0]->m_children[0]->m_type == NodeType::Number);
-    REQUIRE(right.m_children[0]->m_children[0]->getValue<double>() == Catch::Approx(4.0));
+    REQUIRE(divBin->lhs->is<ast::Unary>());
+    auto* rightUnary = divBin->lhs->get_if<ast::Unary>();
+    REQUIRE(rightUnary->op == OperatorType::UnaryMinus);
+    REQUIRE(rightUnary->operand->is<tok::Number>());
+    REQUIRE(rightUnary->operand->get_if<tok::Number>()->value == Catch::Approx(4.0));
 
     // Right child's right: Variable x
-    REQUIRE(right.m_children[1]->m_type == NodeType::Variable);
-    REQUIRE(right.m_children[1]->getValue<std::string>() == "x");
+    REQUIRE(divBin->rhs->is<tok::Variable>());
+    REQUIRE(divBin->rhs->get_if<tok::Variable>()->name == "x");
 }
 
 // Failure test cases
 TEST_CASE("Parser: Empty input") {
-    std::vector<Token> tokens = {};
+    std::vector<tok::Token> tokens = {};
 
     Parser parser(tokens);
-    REQUIRE_THROWS_AS(parser.parseExpression(), std::runtime_error);
+    REQUIRE_THROWS_AS(parser.parse(), ParseError);
 }
 
 TEST_CASE("Parser: Unary minus without operand (u-)") {
-    std::vector<Token> tokens = {
-        Token(OperatorType::UnaryMinus)
+    std::vector<tok::Token> tokens = {
+        tok::Token(tok::Operator{ OperatorType::Subtract })
     };
 
     Parser parser(tokens);
-    REQUIRE_THROWS_AS(parser.parseExpression(), std::runtime_error);
+    REQUIRE_THROWS_AS(parser.parse(), ParseError);
 }
 
 TEST_CASE("Parser: Binary operator without right operand (3+)") {
-    std::vector<Token> tokens = {
-        Token(3.0),
-        Token(OperatorType::Add)
+    std::vector<tok::Token> tokens = {
+        tok::Token(tok::Number{ 3.0 }),
+        tok::Token(tok::Operator{ OperatorType::Add })
     };
 
     Parser parser(tokens);
-    REQUIRE_THROWS_AS(parser.parseExpression(), std::runtime_error);
+    REQUIRE_THROWS_AS(parser.parse(), ParseError);
 }
 
 TEST_CASE("Parser: Unclosed parenthesis ( (3+4") {
-    std::vector<Token> tokens = {
-        Token(TokenType::Parenthesis, '('),
-        Token(3.0),
-        Token(OperatorType::Add),
-        Token(4.0)
+    std::vector<tok::Token> tokens = {
+        tok::Token(tok::Parenthesis{ '(' }),
+        tok::Token(tok::Number{ 3.0 }),
+        tok::Token(tok::Operator{ OperatorType::Add }),
+        tok::Token(tok::Number{ 4.0 })
     };
 
     Parser parser(tokens);
-    REQUIRE_THROWS_AS(parser.parseExpression(), std::runtime_error);
+    REQUIRE_THROWS_AS(parser.parse(), ParseError);
 }
 
 TEST_CASE("Parser: Function without opening parenthesis (sin x)") {
-    std::vector<Token> tokens = {
-        Token(TokenType::Function, "sin"),
-        Token(TokenType::Variable, "x"),
-        Token(TokenType::Parenthesis, ')')
+    std::vector<tok::Token> tokens = {
+        tok::Token(tok::Function{ "sin" }),
+        tok::Token(tok::Variable{ "x" }),
+        tok::Token(tok::Parenthesis{ ')' })
     };
 
     Parser parser(tokens);
-    REQUIRE_THROWS_AS(parser.parseExpression(), std::runtime_error);
+    REQUIRE_THROWS_AS(parser.parse(), ParseError);
 }
 
 TEST_CASE("Parser: Invalid operator as unary (3*+)") {
-    std::vector<Token> tokens = {
-        Token(3.0),
-        Token(OperatorType::Multiply),
-        Token(OperatorType::Add)
+    std::vector<tok::Token> tokens = {
+        tok::Token(tok::Number{ 3.0 }),
+        tok::Token(tok::Operator{ OperatorType::Multiply }),
+        tok::Token(tok::Operator{ OperatorType::Add })
     };
 
     Parser parser(tokens);
-    REQUIRE_THROWS_AS(parser.parseExpression(), std::runtime_error);
+    REQUIRE_THROWS_AS(parser.parse(), ParseError);
 }

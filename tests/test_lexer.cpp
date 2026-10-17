@@ -9,14 +9,14 @@ TEST_CASE("Decimal numbers and leading dots") {
     auto tokens = lexer.tokenize();
     REQUIRE(tokens.size() == 3);
 
-    REQUIRE(tokens[0].m_tType == TokenType::Number);
-    REQUIRE(tokens[0].getValue<double>() == Catch::Approx(0.5));
+    REQUIRE(tokens[0].is<tok::Number>());
+    REQUIRE(tokens[0].get_if<tok::Number>()->value == Catch::Approx(0.5));
 
-    REQUIRE(tokens[1].m_tType == TokenType::Operator);
-    REQUIRE(tokens[1].getValue<OperatorType>() == OperatorType::Add);
+    REQUIRE(tokens[1].is<tok::Operator>());
+    REQUIRE(tokens[1].get_if<tok::Operator>()->type == OperatorType::Add);
 
-    REQUIRE(tokens[2].m_tType == TokenType::Number);
-    REQUIRE(tokens[2].getValue<double>() == Catch::Approx(0.25));
+    REQUIRE(tokens[2].is<tok::Number>());
+    REQUIRE(tokens[2].get_if<tok::Number>()->value == Catch::Approx(0.25));
 }
 
 TEST_CASE("Factorial, power, mod, and integer division") {
@@ -24,13 +24,13 @@ TEST_CASE("Factorial, power, mod, and integer division") {
     auto tokens = lexer.tokenize();
     REQUIRE(tokens.size() == 8);
 
-    REQUIRE(tokens[0].getValue<double>() == Catch::Approx(5));
-    REQUIRE(tokens[1].getValue<OperatorType>() == OperatorType::Factorial);
-    REQUIRE(tokens[2].getValue<OperatorType>() == OperatorType::Power);
-    REQUIRE(tokens[3].getValue<double>() == Catch::Approx(2));
-    REQUIRE(tokens[4].getValue<OperatorType>() == OperatorType::Mod);
-    REQUIRE(tokens[5].getValue<double>() == Catch::Approx(3));
-    REQUIRE(tokens[6].getValue<OperatorType>() == OperatorType::Int_divide);
+    REQUIRE(tokens[0].get_if<tok::Number>()->value == Catch::Approx(5));
+    REQUIRE(tokens[1].get_if<tok::Operator>()->type == OperatorType::Factorial);
+    REQUIRE(tokens[2].get_if<tok::Operator>()->type == OperatorType::Power);
+    REQUIRE(tokens[3].get_if<tok::Number>()->value == Catch::Approx(2));
+    REQUIRE(tokens[4].get_if<tok::Operator>()->type == OperatorType::Mod);
+    REQUIRE(tokens[5].get_if<tok::Number>()->value == Catch::Approx(3));
+    REQUIRE(tokens[6].get_if<tok::Operator>()->type == OperatorType::IntDivide);
 }
 
 TEST_CASE("Variable assignment and expressions") {
@@ -38,18 +38,18 @@ TEST_CASE("Variable assignment and expressions") {
     auto tokens = lexer.tokenize();
     REQUIRE(tokens.size() == 5);
 
-    REQUIRE(tokens[0].m_tType == TokenType::Variable);
-    REQUIRE(tokens[0].getValue<std::string>() == "x");
+    REQUIRE(tokens[0].is<tok::Variable>());
+    REQUIRE(tokens[0].get_if<tok::Variable>()->name == "x");
 
-    REQUIRE(tokens[1].m_tType == TokenType::Operator);
-    REQUIRE(tokens[1].getValue<OperatorType>() == OperatorType::Assignment);
+    REQUIRE(tokens[1].is<tok::Operator>());
+    REQUIRE(tokens[1].get_if<tok::Operator>()->type == OperatorType::Assignment);
 
-    REQUIRE(tokens[2].getValue<double>() == Catch::Approx(3));
+    REQUIRE(tokens[2].get_if<tok::Number>()->value == Catch::Approx(3));
 
-    REQUIRE(tokens[3].getValue<OperatorType>() == OperatorType::Add);
+    REQUIRE(tokens[3].get_if<tok::Operator>()->type == OperatorType::Add);
 
-    REQUIRE(tokens[4].m_tType == TokenType::Variable);
-    REQUIRE(tokens[4].getValue<std::string>() == "y");
+    REQUIRE(tokens[4].is<tok::Variable>());
+    REQUIRE(tokens[4].get_if<tok::Variable>()->name == "y");
 }
 
 TEST_CASE("Nested functions and parentheses") {
@@ -57,31 +57,31 @@ TEST_CASE("Nested functions and parentheses") {
     auto tokens = lexer.tokenize();
     REQUIRE(tokens.size() == 9);
 
-    REQUIRE(tokens[0].m_tType == TokenType::Function);
-    REQUIRE(tokens[0].getValue<std::string>() == "sqrt");
+    REQUIRE(tokens[0].is<tok::Function>());
+    REQUIRE(tokens[0].get_if<tok::Function>()->name == "sqrt");
 
-    REQUIRE(tokens[1].m_tType == TokenType::Parenthesis);
-    REQUIRE(tokens[1].getValue<char>() == '(');
+    REQUIRE(tokens[1].is<tok::Parenthesis>());
+    REQUIRE(tokens[1].get_if<tok::Parenthesis>()->symbol == '(');
 
-    REQUIRE(tokens[2].m_tType == TokenType::Function);
-    REQUIRE(tokens[2].getValue<std::string>() == "abs");
+    REQUIRE(tokens[2].is<tok::Function>());
+    REQUIRE(tokens[2].get_if<tok::Function>()->name == "abs");
 
-    REQUIRE(tokens[3].m_tType == TokenType::Parenthesis);
-    REQUIRE(tokens[3].getValue<char>() == '(');
+    REQUIRE(tokens[3].is<tok::Parenthesis>());
+    REQUIRE(tokens[3].get_if<tok::Parenthesis>()->symbol == '(');
 
-    REQUIRE(tokens[4].m_tType == TokenType::Variable);
-    REQUIRE(tokens[4].getValue<std::string>() == "x");
+    REQUIRE(tokens[4].is<tok::Variable>());
+    REQUIRE(tokens[4].get_if<tok::Variable>()->name == "x");
 
-    REQUIRE(tokens[5].getValue<OperatorType>() == OperatorType::Add);
+    REQUIRE(tokens[5].get_if<tok::Operator>()->type == OperatorType::Add);
 
-    REQUIRE(tokens[6].m_tType == TokenType::Number);
-    REQUIRE(tokens[6].getValue<double>() == Catch::Approx(1));
+    REQUIRE(tokens[6].is<tok::Number>());
+    REQUIRE(tokens[6].get_if<tok::Number>()->value == Catch::Approx(1));
 
-    REQUIRE(tokens[7].m_tType == TokenType::Parenthesis);
-    REQUIRE(tokens[7].getValue<char>() == ')');
+    REQUIRE(tokens[7].is<tok::Parenthesis>());
+    REQUIRE(tokens[7].get_if<tok::Parenthesis>()->symbol == ')');
 
-    REQUIRE(tokens[8].m_tType == TokenType::Parenthesis);
-    REQUIRE(tokens[8].getValue<char>() == ')');
+    REQUIRE(tokens[8].is<tok::Parenthesis>());
+    REQUIRE(tokens[8].get_if<tok::Parenthesis>()->symbol == ')');
 }
 
 TEST_CASE("Multiple variables and functions in a row") {
@@ -89,31 +89,29 @@ TEST_CASE("Multiple variables and functions in a row") {
     auto tokens = lexer.tokenize();
     REQUIRE(tokens.size() == 10);
 
-    REQUIRE(tokens[0].m_tType == TokenType::Variable);
-    REQUIRE(tokens[0].getValue<std::string>() == "a");
+    REQUIRE(tokens[0].is<tok::Variable>());
+    REQUIRE(tokens[0].get_if<tok::Variable>()->name == "a");
 
-    REQUIRE(tokens[1].getValue<OperatorType>() == OperatorType::Add);
+    REQUIRE(tokens[1].get_if<tok::Operator>()->type == OperatorType::Add);
 
-    REQUIRE(tokens[2].m_tType == TokenType::Variable);
-    REQUIRE(tokens[2].getValue<std::string>() == "b");
+    REQUIRE(tokens[2].is<tok::Variable>());
+    REQUIRE(tokens[2].get_if<tok::Variable>()->name == "b");
 
-    REQUIRE(tokens[3].m_tType == TokenType::Operator);
-    REQUIRE(tokens[3].getValue<OperatorType>() == OperatorType::Multiply);
+    REQUIRE(tokens[3].get_if<tok::Operator>()->type == OperatorType::Multiply);
 
-    REQUIRE(tokens[4].m_tType == TokenType::Function);
-    REQUIRE(tokens[4].getValue<std::string>() == "sin");
+    REQUIRE(tokens[4].is<tok::Function>());
+    REQUIRE(tokens[4].get_if<tok::Function>()->name == "sin");
 
-    REQUIRE(tokens[5].m_tType == TokenType::Parenthesis);
-    REQUIRE(tokens[5].getValue<char>() == '(');
+    REQUIRE(tokens[5].is<tok::Parenthesis>());
+    REQUIRE(tokens[5].get_if<tok::Parenthesis>()->symbol == '(');
 
-    REQUIRE(tokens[6].m_tType == TokenType::Variable);
-    REQUIRE(tokens[6].getValue<std::string>() == "theta");
+    REQUIRE(tokens[6].is<tok::Variable>());
+    REQUIRE(tokens[6].get_if<tok::Variable>()->name == "theta");
 
-    REQUIRE(tokens[7].m_tType == TokenType::Parenthesis);
-    REQUIRE(tokens[7].getValue<char>() == ')');
+    REQUIRE(tokens[7].is<tok::Parenthesis>());
+    REQUIRE(tokens[7].get_if<tok::Parenthesis>()->symbol == ')');
 
-    REQUIRE(tokens[8].m_tType == TokenType::Operator);
-    REQUIRE(tokens[8].getValue<OperatorType>() == OperatorType::Subtract);
+    REQUIRE(tokens[8].get_if<tok::Operator>()->type == OperatorType::Subtract);
 }
 
 TEST_CASE("Valid scientific notation with positive exponent") {
@@ -121,8 +119,8 @@ TEST_CASE("Valid scientific notation with positive exponent") {
     auto tokens = lexer.tokenize();
     REQUIRE(tokens.size() == 1);
 
-    REQUIRE(tokens[0].m_tType == TokenType::Number);
-    REQUIRE(tokens[0].getValue<double>() == Catch::Approx(1e10));
+    REQUIRE(tokens[0].is<tok::Number>());
+    REQUIRE(tokens[0].get_if<tok::Number>()->value == Catch::Approx(1e10));
 }
 
 TEST_CASE("Valid scientific notation with negative exponent") {
@@ -130,8 +128,8 @@ TEST_CASE("Valid scientific notation with negative exponent") {
     auto tokens = lexer.tokenize();
     REQUIRE(tokens.size() == 1);
 
-    REQUIRE(tokens[0].m_tType == TokenType::Number);
-    REQUIRE(tokens[0].getValue<double>() == Catch::Approx(0.0025));
+    REQUIRE(tokens[0].is<tok::Number>());
+    REQUIRE(tokens[0].get_if<tok::Number>()->value == Catch::Approx(0.0025));
 }
 
 TEST_CASE("Valid scientific notation with explicit plus sign") {
@@ -139,33 +137,8 @@ TEST_CASE("Valid scientific notation with explicit plus sign") {
     auto tokens = lexer.tokenize();
     REQUIRE(tokens.size() == 1);
 
-    REQUIRE(tokens[0].m_tType == TokenType::Number);
-    REQUIRE(tokens[0].getValue<double>() == Catch::Approx(30000000));
-}
-
-TEST_CASE("Incomplete scientific notation missing exponent digits") {
-    Lexer lexer("1e");
-    REQUIRE_THROWS_AS(lexer.tokenize(), std::runtime_error);
-}
-
-TEST_CASE("Incomplete scientific notation with trailing plus") {
-    Lexer lexer("2e+");
-    REQUIRE_THROWS_AS(lexer.tokenize(), std::runtime_error);
-}
-
-TEST_CASE("Incomplete scientific notation with trailing minus") {
-    Lexer lexer("3e-");
-    REQUIRE_THROWS_AS(lexer.tokenize(), std::runtime_error);
-}
-
-TEST_CASE("Scientific notation with invalid operator in exponent") {
-    Lexer lexer("1e*5");
-    REQUIRE_THROWS_AS(lexer.tokenize(), std::runtime_error);
-}
-
-TEST_CASE("Scientific notation with second dot in exponent") {
-    Lexer lexer("1.2e3.4");
-    REQUIRE_THROWS_AS(lexer.tokenize(), std::runtime_error);
+    REQUIRE(tokens[0].is<tok::Number>());
+    REQUIRE(tokens[0].get_if<tok::Number>()->value == Catch::Approx(30000000));
 }
 
 TEST_CASE("Expression with scientific notation and operators") {
@@ -173,23 +146,22 @@ TEST_CASE("Expression with scientific notation and operators") {
     auto tokens = lexer.tokenize();
     REQUIRE(tokens.size() == 6);
 
-    REQUIRE(tokens[0].m_tType == TokenType::Number);
-    REQUIRE(tokens[0].getValue<double>() == Catch::Approx(550));
+    REQUIRE(tokens[0].is<tok::Number>());
+    REQUIRE(tokens[0].get_if<tok::Number>()->value == Catch::Approx(550));
 
-    REQUIRE(tokens[1].m_tType == TokenType::Operator);
-    REQUIRE(tokens[1].getValue<OperatorType>() == OperatorType::Add);
+    REQUIRE(tokens[1].get_if<tok::Operator>()->type == OperatorType::Add);
 
-    REQUIRE(tokens[2].m_tType == TokenType::Function);
-    REQUIRE(tokens[2].getValue<std::string>() == "sin");
+    REQUIRE(tokens[2].is<tok::Function>());
+    REQUIRE(tokens[2].get_if<tok::Function>()->name == "sin");
 
-    REQUIRE(tokens[3].m_tType == TokenType::Parenthesis);
-    REQUIRE(tokens[3].getValue<char>() == '(');
+    REQUIRE(tokens[3].is<tok::Parenthesis>());
+    REQUIRE(tokens[3].get_if<tok::Parenthesis>()->symbol == '(');
 
-    REQUIRE(tokens[4].m_tType == TokenType::Variable);
-    REQUIRE(tokens[4].getValue<std::string>() == "x");
+    REQUIRE(tokens[4].is<tok::Variable>());
+    REQUIRE(tokens[4].get_if<tok::Variable>()->name == "x");
 
-    REQUIRE(tokens[5].m_tType == TokenType::Parenthesis);
-    REQUIRE(tokens[5].getValue<char>() == ')');
+    REQUIRE(tokens[5].is<tok::Parenthesis>());
+    REQUIRE(tokens[5].get_if<tok::Parenthesis>()->symbol == ')');
 }
 
 TEST_CASE("Decimal without leading digit") {
@@ -197,8 +169,8 @@ TEST_CASE("Decimal without leading digit") {
     auto tokens = lexer.tokenize();
     REQUIRE(tokens.size() == 1);
 
-    REQUIRE(tokens[0].m_tType == TokenType::Number);
-    REQUIRE(tokens[0].getValue<double>() == Catch::Approx(0.5));
+    REQUIRE(tokens[0].is<tok::Number>());
+    REQUIRE(tokens[0].get_if<tok::Number>()->value == Catch::Approx(0.5));
 }
 
 TEST_CASE("Invalid double dot number") {

@@ -1,30 +1,42 @@
 #pragma once
-#include <array>
-#include "Token.h"
+#include <cstddef>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <vector>
 #include "AST.h"
+#include "Token.h"
+
+class ParseError : public std::runtime_error {
+public:
+    ParseError(const std::string& msg, size_t pos)
+        : std::runtime_error(msg + " at position " + std::to_string(pos + 1)), m_pos{ pos } {}
+    size_t position() const { return m_pos; }
+private:
+    size_t m_pos;
+};
 
 class Parser {
-    std::vector<Token> m_tokens;
-    inline static constexpr std::array<int, 11> s_bindingPower = { 1, 2, 3, 3, 3, 4, 3, 5, 0, 4, 4 };
-    size_t m_pos{};
-
 public:
-    Parser(const std::vector<Token>& tokens);
-    std::unique_ptr<ASTNode> parseExpression(int minBP = 0);
-private:
-    const Token& peek() const {
-        return m_tokens[m_pos];
-    }
-    Token& next() {
-        return m_tokens[m_pos++];
-    }
-    bool atEnd() const {
-        return m_pos >= m_tokens.size();
-    }
-    int getBindingPower(OperatorType op) const {
-        return s_bindingPower[static_cast<size_t>(op)];
-    }
+    explicit Parser(std::vector<tok::Token> tokens) : m_tokens{ std::move(tokens) } {}
+    [[nodiscard]] ast::NodePtr parse();
 
-    std::unique_ptr<ASTNode> parseTerm();
-    std::vector<std::unique_ptr<ASTNode>> parseFunctionArgs();
+private:
+    ast::NodePtr parseStatement();
+    ast::NodePtr parseExpr(int minBP);
+    ast::NodePtr parsePrefix();
+    ast::NodePtr parseCall(tok::Function callee);
+    ast::NodePtr parseFuncDef();
+
+    bool looksLikeFuncDef() const;
+
+    const tok::Token* at(size_t i) const { return i < m_tokens.size() ? &m_tokens[i] : nullptr; }
+    bool   atEnd() const { return m_pos >= m_tokens.size(); }
+    size_t errorPos() const;                    // position of current token, or of the last one
+    bool   matchParen(char c);                  // consumes if present
+    void   expectParen(char c);
+    bool   matchComma();
+
+    std::vector<tok::Token> m_tokens;
+    size_t m_pos{};
 };

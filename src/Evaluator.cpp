@@ -1,204 +1,133 @@
 #include "Evaluator.h"
-#include <stdexcept>
-#include <cmath>
 #include <algorithm>
-#include <limits>
+#include <cmath>
+#include <numbers>
+#include <string_view>
+#include <ranges>
 
-Evaluator::Evaluator() {
-    // Initialize mathematical constants
-    variables["pi"] = 3.141592653589793;
-    variables["e"] = 2.718281828459045;
-    variables["inf"] = std::numeric_limits<double>::infinity();
-    variables["nan"] = std::numeric_limits<double>::quiet_NaN();
+namespace {
+    double require(bool ok, double value, std::string_view msg) {
+        if (!ok) throw EvalError(msg.data());
+        return value;
+    }
 }
 
-double Evaluator::evaluate(const ASTNode& node, std::unordered_map<std::string, double>* localVars) {
-    switch (node.m_type) {
-    case NodeType::Number:
-        return node.getValue<double>();
+Evaluator::Evaluator() {
+    m_globals = { { "pi", std::numbers::pi },{ "e", std::numbers::e },
+                  { "inf", std::numeric_limits<double>::infinity() },
+                  { "nan", std::numeric_limits<double>::quiet_NaN() } };
 
-    case NodeType::Variable: {
-        auto name = node.getValue<std::string>();
-        if (localVars && localVars->find(name) != localVars->end()) {
-            return (*localVars)[name];
-        }
-        if (variables.find(name) != variables.end()) {
-            return variables[name];
-        }
-        throw std::runtime_error("Undefined variable: " + name);
+    auto unary = [&](const char* name, double(*f)(double)) {
+        m_builtins[name] = { 1, 1, [f](std::span<const double> a) { return f(a[0]); } };
+        };
+
+    auto factorial = [](double n) {
+        int ni = static_cast<int>(n);
+        
+        };
+
+    unary("sin", std::sin);     unary("cos", std::cos);   unary("tan", std::tan);
+    unary("atan", std::atan);   unary("exp", std::exp);   unary("abs", std::fabs);
+    unary("floor", std::floor); unary("ceil", std::ceil); unary("round", std::round);
+
+    m_builtins["asin"] =  { 1, 1,    [](auto a) { return require(std::abs(a[0]) <= 1, std::asin(a[0]), "asin requires argument in [-1, 1]"); } };
+    m_builtins["acos"] =  { 1, 1,    [](auto a) { return require(std::abs(a[0]) <= 1, std::acos(a[0]), "acos requires argument in [-1, 1]"); } };
+    m_builtins["sqrt"] =  { 1, 1,    [](auto a) { return require(a[0] >= 0, std::sqrt(a[0]), "sqrt requires non-negative argument"); } };
+    m_builtins["log"] =   { 1, 1,    [](auto a) { return require(a[0] > 0, std::log(a[0]),   "log requires positive argument"); } };
+    m_builtins["log10"] = { 1, 1,    [](auto a) { return require(a[0] > 0, std::log10(a[0]), "log10 requires positive argument"); } };
+    m_builtins["atan2"] = { 2, 2,    [](auto a) { return std::atan2(a[0], a[1]); } };
+    m_builtins["min"] =   { 1, npos, [](auto a) { return *std::ranges::min_element(a); } };
+    m_builtins["max"] =   { 1, npos, [](auto a) { return *std::ranges::max_element(a); } };
+    m_builtins["factorial"] = { 1, 170, [](auto a) {
+        int n = static_cast<int>(a[0]);
+        if (n < 0) return 0.0;
+        return static_cast<double>(
+            std::ranges::fold_left(std::views::iota(1, n + 1), 1LL, std::multiplies<long long>())
+        );
+    } };
+}
+
+std::optional<double> Evaluator::execute(const ast::ASTNode& node) {
+    if (const auto* def = node.get_if<ast::FuncDef>()) {
+        if (m_builtins.contains(def->callee.name))
+            throw EvalError("Cannot redefine builtin function: " + def->callee.name);
+        m_functions[def->callee.name] = { def->params, def->body };
+        return std::nullopt;
+    }
+    return eval(node, nullptr);
+}
+
+double Evaluator::eval(const ast::ASTNode& n, const Scope* locals) {
+    return std::visit(tok::overloaded{
+        [](const tok::Number& x) { return x.value; },
+
+        [&](const tok::Variable& v) {
+            if (locals)
+                if (auto it = locals->find(v.name); it != locals->end()) return it->second;
+            if (auto it = m_globals.find(v.name); it != m_globals.end()) return it->second;
+            throw EvalError("Undefined variable: " + v.name);
+        },
+        [&](const ast::Unary& u)  { return applyUnary(u.op, eval(*u.operand, locals)); },
+        [&](const ast::Binary& b) { return applyBinary(b.op, eval(*b.lhs, locals), eval(*b.rhs, locals)); },
+        [&](const ast::Assign& a) { return m_globals[a.target.name] = eval(*a.value, locals); },
+        [&](const ast::Call& c)   { return evalCall(c, locals); },
+        [&](const ast::FuncDef&) -> double { throw EvalError("Function definition not allowed here"); },
+        }, n.m_value);
+}
+
+double Evaluator::evalCall(const ast::Call& c, const Scope* locals) {
+    std::vector<double> args;
+    args.reserve(c.args.size());
+    for (const auto& a : c.args) args.push_back(eval(*a, locals));
+
+    const std::string& name = c.callee.name;
+
+    if (auto it = m_builtins.find(name); it != m_builtins.end()) {
+        const Builtin& b = it->second;
+        if (args.size() < b.minArgs || args.size() > b.maxArgs)
+            throw EvalError(name + ": wrong number of arguments");
+        return b.fn(args);
     }
 
-    case NodeType::Operator: {
-        auto op = node.getValue<OperatorType>();
-        if (op == OperatorType::UnaryMinus) {
-            return -evaluate(*node.m_children[0], localVars);
-        }
-        if (op == OperatorType::UnaryPlus) {
-            return evaluate(*node.m_children[0], localVars);
-        }
-        if (op == OperatorType::Assignment) {
-            if (node.m_children[0]->m_type == NodeType::Function) {
-                auto name = node.m_children[0]->getValue<std::string>();
-                if (node.m_children[0]->m_children.size() != 1 || node.m_children[0]->m_children[0]->m_type != NodeType::Variable) {
-                    throw std::runtime_error("Function assignment requires one variable argument");
-                }
-                std::vector<std::string> argNames = { node.m_children[0]->m_children[0]->getValue<std::string>() };
-                functions[name] = { std::move(argNames), node.m_children[1]->clone() };
-                return 0.0;
-            }
-            if (node.m_children[0]->m_type != NodeType::Variable) {
-                throw std::runtime_error("Assignment target must be a variable");
-            }
-            auto name = node.m_children[0]->getValue<std::string>();
-            double value = evaluate(*node.m_children[1], localVars);
-            variables[name] = value;
-            return value;
-        }
-        if (op == OperatorType::Factorial) {
-            double arg = evaluate(*node.m_children[0], localVars);
-            if (arg < 0 || std::floor(arg) != arg) {
-                throw std::runtime_error("Factorial requires a non-negative integer");
-            }
-            int n = static_cast<int>(arg);
-            double result = 1.0;
-            for (int i = 2; i <= n; ++i) {
-                result *= i;
-            }
-            return result;
-        }
-        double left = evaluate(*node.m_children[0], localVars);
-        double right = evaluate(*node.m_children[1], localVars);
-        switch (op) {
-        case OperatorType::Add: return left + right;
-        case OperatorType::Subtract: return left - right;
-        case OperatorType::Multiply: return left * right;
-        case OperatorType::Divide:
-            if (right == 0) throw std::runtime_error("Division by zero");
-            return left / right;
-        case OperatorType::Power: return std::pow(left, right);
-        case OperatorType::Int_divide:
-            if(right == 0) throw std::runtime_error("Division by zero");
-            return std::floor(left / right);
-        case OperatorType::Mod:return static_cast<double>(static_cast<int>(left) % static_cast<int>(right));
-        default: throw std::runtime_error("Unsupported operator");
-        }
-    }
+    auto it = m_functions.find(name);
+    if (it == m_functions.end()) throw EvalError("Undefined function: " + name);
+    const UserFunction& f = it->second;
+    if (f.params.size() != args.size())
+        throw EvalError(name + " expects " + std::to_string(f.params.size()) + " argument(s)");
+    if (m_depth >= kMaxDepth) throw EvalError("Maximum recursion depth exceeded");
 
-    case NodeType::Function: {
-        auto name = node.getValue<std::string>();
-        // Trigonometric functions
-        if (name == "sin" || name == "cos" || name == "tan") {
-            if (node.m_children.size() != 1) {
-                throw std::runtime_error(name + " expects one argument");
-            }
-            double arg = evaluate(*node.m_children[0], localVars);
-            if (name == "sin") return std::sin(arg);
-            if (name == "cos") return std::cos(arg);
-            if (name == "tan") {
-                if (std::cos(arg) == 0) throw std::runtime_error("tan undefined at pi/2 + k*pi");
-                return std::tan(arg);
-            }
-        }
-        if (name == "asin" || name == "acos") {
-            if (node.m_children.size() != 1) {
-                throw std::runtime_error(name + " expects one argument");
-            }
-            double arg = evaluate(*node.m_children[0], localVars);
-            if (arg < -1.0 || arg > 1.0) throw std::runtime_error(name + " requires argument in [-1, 1]");
-            return name == "asin" ? std::asin(arg) : std::acos(arg);
-        }
-        if (name == "atan") {
-            if (node.m_children.size() != 1) {
-                throw std::runtime_error("atan expects one argument");
-            }
-            return std::atan(evaluate(*node.m_children[0], localVars));
-        }
-        if (name == "atan2") {
-            if (node.m_children.size() != 2) {
-                throw std::runtime_error("atan2 expects two arguments");
-            }
-            double y = evaluate(*node.m_children[0], localVars);
-            double x = evaluate(*node.m_children[1], localVars);
-            return std::atan2(y, x);
-        }
-        // Exponential and logarithmic
-        if (name == "exp" || name == "sqrt") {
-            if (node.m_children.size() != 1) {
-                throw std::runtime_error(name + " expects one argument");
-            }
-            double arg = evaluate(*node.m_children[0], localVars);
-            if (name == "sqrt" && arg < 0) throw std::runtime_error("sqrt requires non-negative argument");
-            return name == "exp" ? std::exp(arg) : std::sqrt(arg);
-        }
-        if (name == "log" || name == "log10") {
-            if (node.m_children.size() != 1) {
-                throw std::runtime_error(name + " expects one argument");
-            }
-            double arg = evaluate(*node.m_children[0], localVars);
-            if (arg <= 0) throw std::runtime_error(name + " requires positive argument");
-            return name == "log" ? std::log(arg) : std::log10(arg);
-        }
-        // Rounding and utility
-        if (name == "abs" || name == "floor" || name == "ceil" || name == "round") {
-            if (node.m_children.size() != 1) {
-                throw std::runtime_error(name + " expects one argument");
-            }
-            double arg = evaluate(*node.m_children[0], localVars);
-            if (name == "abs") return std::abs(arg);
-            if (name == "floor") return std::floor(arg);
-            if (name == "ceil") return std::ceil(arg);
-            if (name == "round") return std::round(arg);
-        }
-        if (name == "min") {
-            if (node.m_children.empty()) {
-                throw std::runtime_error("min requires at least one argument");
-            }
-            std::vector<double> args;
-            for (const auto& child : node.m_children) {
-                args.push_back(evaluate(*child, localVars));
-            }
-            return *std::min_element(args.begin(), args.end());
-        }
-        if (name == "factorial") {
-            if (node.m_children.size() != 1) {
-                throw std::runtime_error("factorial expects one argument");
-            }
-            double arg = evaluate(*node.m_children[0], localVars);
-            if (arg < 0 || std::floor(arg) != arg) {
-                throw std::runtime_error("factorial requires a non-negative integer");
-            }
-            int n = static_cast<int>(arg);
-            double result = 1.0;
-            for (int i = 2; i <= n; ++i) {
-                result *= i;
-            }
-            return result;
-        }
-        if (name == "max") {
-            if (node.m_children.empty()) {
-                throw std::runtime_error("max requires at least one argument");
-            }
-            std::vector<double> args;
-            for (const auto& child : node.m_children) {
-                args.push_back(evaluate(*child, localVars));
-            }
-            return *std::max_element(args.begin(), args.end());
-        }
-        if (functions.find(name) == functions.end()) {
-            throw std::runtime_error("Undefined function: " + name);
-        }
-        auto& func = functions[name];
-        if (func.argNames.size() != node.m_children.size()) {
-            throw std::runtime_error("Incorrect number of arguments for function: " + name);
-        }
-        std::unordered_map<std::string, double> funcVars;
-        for (size_t i = 0; i < func.argNames.size(); ++i) {
-            funcVars[func.argNames[i]] = evaluate(*node.m_children[i], localVars);
-        }
-        return evaluate(*func.body, &funcVars);
-    }
+    Scope frame;
+    for (size_t i = 0; i < args.size(); ++i) frame[f.params[i].name] = args[i];
 
-    default:
-        throw std::runtime_error("Unsupported node type");
+    ++m_depth;
+    struct Guard { int& d; ~Guard() { --d; } } guard{ m_depth };   // restores depth even on throw
+    return eval(*f.body, &frame);
+}
+
+double Evaluator::applyBinary(OperatorType op, double l, double r) {
+    switch (op) {
+    case OperatorType::Add:       return l + r;
+    case OperatorType::Subtract:  return l - r;
+    case OperatorType::Multiply:  return l * r;
+    case OperatorType::Divide:    return require(r != 0, l / r, "Division by zero");
+    case OperatorType::IntDivide: return require(r != 0, std::floor(l / r), "Division by zero");
+    case OperatorType::Mod:       return require(r != 0, std::fmod(l, r), "Modulo by zero");
+    case OperatorType::Power:     return std::pow(l, r);
+    default: throw EvalError("Not a binary operator");
+    }
+}
+
+double Evaluator::applyUnary(OperatorType op, double x) {
+    switch (op) {
+    case OperatorType::UnaryMinus: return -x;
+    case OperatorType::UnaryPlus:  return x;
+    case OperatorType::Factorial: {
+        if (x < 0 || std::floor(x) != x) throw EvalError("Factorial requires a non-negative integer");
+        if (x > 170) throw EvalError("Factorial too large");
+        double result = 1;
+        for (int i = 2; i <= static_cast<int>(x); ++i) result *= i;
+        return result;
+    }
+    default: throw EvalError("Not a unary operator");
     }
 }

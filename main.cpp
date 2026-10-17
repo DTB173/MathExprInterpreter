@@ -12,7 +12,7 @@ static std::string promptInput() {
 	return input;
 }
 
-static void printTokens(const std::vector<Token>& tokens) {
+static void printTokens(const std::vector<tok::Token>& tokens) {
 	for (const auto& t : tokens) {
 		std::cout << t << '\n';
 	}
@@ -49,7 +49,7 @@ void printWelcome() {
 int main(){
 	printWelcome();
 	std::string input{};
-	std::vector<Token> tokens;
+	std::vector<tok::Token> tokens;
 	Evaluator e;
 	while (true) {
 		input = promptInput();
@@ -63,15 +63,16 @@ int main(){
 			continue;
 		}
 			
-		if (input.empty())
-			continue;
+		if (input.empty()) continue;
 		Lexer lex{input};
 		try {
 			tokens = lex.tokenize();
 			Parser parser{ tokens };
-			auto astroot = parser.parseExpression();
-			double value = e.evaluate(*astroot);
-			std::cout << value<<'\n';
+			auto astroot = parser.parse();
+			ast::print(std::cout, *astroot);
+			if (auto value = e.execute(*astroot); value.has_value()) {
+				std::cout << *value << '\n';
+			}
 		}
 		catch (std::exception& e) {
 			std::cout << "Error: \"" << e.what() << "\"\n";
