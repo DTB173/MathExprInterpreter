@@ -21,11 +21,6 @@ Evaluator::Evaluator() {
         m_builtins[name] = { 1, 1, [f](std::span<const double> a) { return f(a[0]); } };
         };
 
-    auto factorial = [](double n) {
-        int ni = static_cast<int>(n);
-        
-        };
-
     unary("sin", std::sin);     unary("cos", std::cos);   unary("tan", std::tan);
     unary("atan", std::atan);   unary("exp", std::exp);   unary("abs", std::fabs);
     unary("floor", std::floor); unary("ceil", std::ceil); unary("round", std::round);

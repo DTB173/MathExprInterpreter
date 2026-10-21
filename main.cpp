@@ -69,7 +69,6 @@ int main(){
 			tokens = lex.tokenize();
 			Parser parser{ tokens };
 			auto astroot = parser.parse();
-			ast::print(std::cout, *astroot);
 			if (auto value = e.execute(*astroot); value.has_value()) {
 				std::cout << *value << '\n';
 			}
