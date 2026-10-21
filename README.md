@@ -15,14 +15,19 @@ Interactive math expression interpreter in C++20: a REPL with a hand-written lex
 Example session:
  
 ```
->> x=3
+>> x = 3
 3
 >> f(x) = x^2 + 1
 >> f(x)
 10
 >> f(f(2))
 26
->>
+>> 5/0
+Error: "Division by zero"
+>> 2+2
+4
+>> 2+2-
+Error: "Unexpected end of input at position 4"
 ```
 
 ## How it works
@@ -30,19 +35,19 @@ Example session:
 Input goes through three stages:
  
 1. **Lexer**: turns the input line into tokens (numbers, operators, variables, function names, parentheses, commas).
-2. **Parser**: a Pratt parser (precedence climbing with binding powers) builds an abstract syntax tree.
+2. **Parser**: a Pratt parser uses binding powers to handle operator precedence and associativity while constructing the AST.
 3. **Evaluator**: walks the tree with a visitor and looks up variables, user functions and built-ins.
 
 ## Design decisions
  
-- **`std::variant` for tokens and AST nodes** instead of tagged unions or an inheritance hierarchy: each token and node kind is its own struct (for example `ast::Binary`, `ast::Call`, `ast::FuncDef`), and the compiler checks that every visitor handles every kind.
+- **`std::variant` for tokens and AST nodes:** represents each token and node kind with a dedicated type (e.g. `ast::Binary`, `ast::Call` and `ast::FuncDef`), enabling type-safe visitation without an inheritance hierarchy.
 - **Built-in functions in a lookup table** so the evaluator stays free of one-off cases.
-- **Function bodies are pure expressions:** assignment is only allowed as a statement at the start of a line, never inside a function body. This keeps functions free of side effects and makes evaluation order easy to reason about.
+- **Function bodies are pure expressions:** assignment is allowed only as a top-level statement, not inside a function body. This prevents assignment side effects within expressions and simplifies evaluation semantics.
 
 
 ## Build and test
  
-Requirements: CMake, a C++20 compiler. Catch2 is downloaded automatically.
+Requirements: CMake, a C++20 compiler. Catch2 is fetched automatically during configuration.
 
 ```
 mkdir build && cd build
@@ -50,10 +55,7 @@ cmake -G "Ninja" .. -DCMAKE_BUILD_TYPE=Release
 cmake --build .
 ```
 
-To run tests, run tests exectutable.
-To run application, run cmdCalc executable.
-The test suite has 38 test cases (252 assertions) written with Catch2, covering the lexer, parser, evaluator and error handling.
+Run the test executable to execute the Catch2 test suite.
+Run cmdCalc to launch the interactive interpreter.
 
-## Roadmap
- 
-- Errors are currently reported with exceptions; moving to `std::expected` is a possible refactor
+The test suite contains 38 test cases (252 assertions), covering lexing, parsing, evaluation and error handling.
