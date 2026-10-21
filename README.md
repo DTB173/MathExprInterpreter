@@ -50,7 +50,8 @@ cmake -G "Ninja" .. -DCMAKE_BUILD_TYPE=Release
 cmake --build .
 ```
 
-To run tests, run tests.exe.
+To run tests, run tests exectutable.
+To run application, run cmdCalc executable.
 The test suite has 38 test cases (252 assertions) written with Catch2, covering the lexer, parser, evaluator and error handling.
 
 ## Roadmap
